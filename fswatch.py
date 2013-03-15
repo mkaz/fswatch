@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 fswatch.py
 Marcus Kazmierczak, marcus@mkaz.com
@@ -14,16 +12,11 @@ requires: pip install fsevents
 Note: if you are running against a large directory, it will 
 take awhile at the beginning, my hunch is it needs to traverse
 all sub-directories and attach the listeners everywhere
-
-TODO:
-  * switch to daemon-mode
-  * add catch-up mode, in case weren't running it
-  * fix hanging sometimes on quit
     
 """
-
-import argparse, os, signal, time   # python packages
-import fsevents                     # https://pypi.python.org/pypi/MacFSEvents
+import os, datetime, time       # python packages
+import fsevents                 # https://pypi.python.org/pypi/MacFSEvents
+import Tkinter
 
 # CONFIG PARAMS, set envirovnment variables or hardcode
 # include trailing slashes for rsync, being more explicit is better
@@ -32,19 +25,13 @@ remote_host = os.getenv('FSWATCH_REMOTE_HOST', 'user@remote.server.com')
 remote_path = os.getenv('FSWATCH_REMOTE_PATH', '/remote/hard/coded/')
 
 # list of files to ignore, simple substring match
-ignore_list = ['.svn', '.DS_Store']
+ignore_list = ['.svn', '.DS_Store', '.git']
 
-def main():
-    global observer, stream
-    observer = fsevents.Observer()
-    observer.start()
-    stream = fsevents.Stream(file_event_sync, local_path, file_events=True)
-    observer.schedule(stream)
-
-    if not args.quiet:
-        print "Watching: %s -- [ ctrl-c to quit ] " % local_path
-    signal.signal(signal.SIGINT, clean_exit)
-    signal.pause()  # run until ctrl-c
+def display(str):
+    global ta
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    mystr = "[{0}] {1} \n".format(now, str)
+    ta.insert(Tkinter.END, mystr)
 
 
 def file_event_sync(event):
@@ -56,22 +43,33 @@ def file_event_sync(event):
             return
     
     # basic rsync to remote server
-    cmd = " rsync -cazq %s %s:%s%s " % (filename, remote_host, remote_path, remote_file)
-    if not args.quiet:
-         print "Syncing ", filename
+    cmd = " rsync -cazq --del %s %s:%s%s " % (filename, remote_host, remote_path, remote_file)
+    display("Syncing %s " % filename)
     os.system(cmd)
 
 
-def clean_exit(signal, frame):
-    """ Mom always says, clean up after yourself """
-    global observer, stream
-    observer.unschedule(stream)
-    observer.stop()
-    
+## Main
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='watches directory for changes and syncs to remote')
-    parser.add_argument('--verbose', action='store_true', help='verbose output')
-    parser.add_argument('--quiet',   action='store_true', help='quiet output')
-    args = parser.parse_args()
-    main()
+## Setup GUI
+canvas = Tkinter.Tk()
+scroll = Tkinter.Scrollbar(canvas)
+ta = Tkinter.Text(canvas)
+
+scroll.pack(side=Tkinter.RIGHT, fill=Tkinter.Y)
+ta.pack(side=Tkinter.LEFT, fill=Tkinter.Y)
+scroll.config(command=ta.yview)
+ta.config(yscrollcommand=scroll.set)
+
+## Setup Watcher
+observer = fsevents.Observer()
+observer.start()
+stream = fsevents.Stream(file_event_sync, local_path, file_events=True)
+observer.schedule(stream)
+
+## running
+display("Watching: %s " % local_path)
+canvas.mainloop()
+
+## clean-up
+observer.unschedule(stream)
+observer.stop()
