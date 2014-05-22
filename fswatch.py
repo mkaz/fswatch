@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 fswatch.py
 Marcus Kazmierczak, marcus@mkaz.com
